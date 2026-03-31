@@ -1,0 +1,47 @@
+{
+  "name": "saas-blog-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-ready SaaS Multi-Tenant Blog Platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:worker\" \"npm run dev:admin\" \"npm run dev:blog\"",
+    "dev:api": "npm run dev --workspace=apps/admin-api",
+    "dev:worker": "npm run worker --workspace=apps/admin-api",
+    "dev:admin": "npm run dev --workspace=apps/admin-dashboard",
+    "dev:blog": "npm run dev --workspace=apps/blog-frontend",
+    "build": "npm run build --workspaces",
+    "build:ts": "npm run build --workspace=packages/shared --workspace=apps/admin-dashboard --workspace=apps/blog-frontend",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces",
+    "lint:fix": "npm run lint --workspaces -- --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run typecheck --workspace=packages/shared && npm run typecheck --workspace=apps/admin-dashboard && npm run typecheck --workspace=apps/blog-frontend",
+    "prepare": "husky",
+    "db:migrate": "npm run migrate --workspace=apps/admin-api",
+    "db:seed": "npm run seed --workspace=apps/admin-api",
+    "docker:up": "docker-compose -f infrastructure/docker/docker-compose.yml up -d",
+    "docker:down": "docker-compose -f infrastructure/docker/docker-compose.yml down",
+    "docker:up:prod": "docker-compose -f infrastructure/docker/docker-compose.prod.yml up -d --build",
+    "docker:down:prod": "docker-compose -f infrastructure/docker/docker-compose.prod.yml down"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.57.2",
+    "@typescript-eslint/parser": "^8.57.2",
+    "concurrently": "^8.2.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-json": "^4.0.1",
+    "eslint-plugin-prettier": "^5.5.5",
+    "husky": "^9.0.0",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.2.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

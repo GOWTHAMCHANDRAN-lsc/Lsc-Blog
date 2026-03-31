@@ -1,0 +1,166 @@
+version: '3.9'
+
+services:
+  # ── PHPMyAdmin ──────────────────────────────────────────────────────────────
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: saas_blog_pma
+    environment:
+      # Link to your mysql service name
+      - PMA_HOST=mysql
+      - PMA_PORT=3306
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-rootpassword}
+      # Use same auth plugin as your mysql service
+      - PMA_ARBITRARY=1
+    ports:
+      - '8080:80'
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - saas_network
+
+  # ── Backend API ─────────────────────────────────────────────────────────────
+  admin-api:
+    build:
+      context: ../../apps/admin-api
+      dockerfile: ../../infrastructure/docker/Dockerfile.api
+    container_name: saas_blog_api
+    ports:
+      - '3001:3001'
+    extra_hosts:
+      - 'mail.lsc-india.org:107.6.182.85'
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: saas_blog
+      DB_USER: root
+      DB_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production}
+      JWT_EXPIRES_IN: 24h
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-dev_webhook_secret}
+      ALLOWED_ORIGINS: http://localhost:3000
+      PLATFORM_DOMAIN: localhost
+      LOG_LEVEL: debug
+      SMTP_HOST: mail.lsc-india.org
+      SMTP_PORT: 587
+      SMTP_SECURE: 'false'
+      SMTP_USER: lsc-blog@lsc-india.org
+      SMTP_PASSWORD: .[PBdHj[4}![a%Te
+      MAIL_FROM: lsc-blog@lsc-india.org
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      elasticsearch:
+        condition: service_started
+    volumes:
+      - ../../apps/admin-api/src:/app/src # hot reload
+    restart: unless-stopped
+    networks:
+      - saas_network
+
+  # ── Background Worker ────────────────────────────────────────────────────────
+  worker:
+    build:
+      context: ../../apps/admin-api
+      dockerfile: ../../infrastructure/docker/Dockerfile.api
+    container_name: saas_blog_worker
+    command: node src/jobs/worker.js
+    healthcheck:
+      disable: true
+    environment:
+      NODE_ENV: development
+      DB_HOST: mysql
+      DB_USER: root
+      DB_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      DB_NAME: saas_blog
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-dev_webhook_secret}
+    depends_on:
+      - mysql
+      - redis
+    restart: unless-stopped
+    networks:
+      - saas_network
+
+  # ── MySQL ────────────────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: saas_blog_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: saas_blog
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ../../database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'mysqladmin',
+          'ping',
+          '-h',
+          'localhost',
+          '-u',
+          'root',
+          '--password=${DB_ROOT_PASSWORD:-rootpassword}',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - saas_network
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: saas_blog_redis
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --appendonly yes
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - saas_network
+
+  # ── Elasticsearch ────────────────────────────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: saas_blog_es
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.ml.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - '9200:9200'
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+    networks:
+      - saas_network
+
+volumes:
+  mysql_data:
+  redis_data:
+  es_data:
+
+networks:
+  saas_network:
+    driver: bridge

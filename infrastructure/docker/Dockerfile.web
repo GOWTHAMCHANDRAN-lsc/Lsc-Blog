@@ -1,0 +1,36 @@
+# Multi-tenant Next.js app (admin-dashboard or blog-frontend)
+# Build from monorepo root so npm workspaces resolve correctly.
+
+FROM node:20-alpine AS deps
+WORKDIR /repo
+COPY package.json package-lock.json ./
+COPY apps ./apps
+COPY packages ./packages
+RUN npm ci
+
+FROM node:20-alpine AS builder
+WORKDIR /repo
+COPY --from=deps /repo /repo
+
+ARG APP_PATH
+ENV NODE_ENV=production
+
+# Build the selected app
+RUN npm run build --workspace=${APP_PATH}
+
+FROM node:20-alpine AS runner
+WORKDIR /repo
+ENV NODE_ENV=production
+
+ARG APP_PATH
+ENV APP_PATH=${APP_PATH}
+
+COPY --from=builder /repo/package.json /repo/package-lock.json ./
+COPY --from=builder /repo/node_modules ./node_modules
+COPY --from=builder /repo/apps ./apps
+COPY --from=builder /repo/packages ./packages
+
+EXPOSE 3000
+
+CMD ["sh", "-c", "npm run start --workspace=${APP_PATH}"]
+

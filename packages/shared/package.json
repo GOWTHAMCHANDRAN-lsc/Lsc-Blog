@@ -1,0 +1,15 @@
+{
+  "name": "@saas-blog/shared",
+  "version": "1.0.0",
+  "description": "Shared types and utilities for SaaS Blog Platform",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

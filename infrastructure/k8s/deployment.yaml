@@ -1,0 +1,247 @@
+# ── Namespace ──────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: saas-blog
+---
+# ── ConfigMap ─────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: saas-blog
+data:
+  NODE_ENV: 'production'
+  PORT: '3001'
+  LOG_LEVEL: 'info'
+  JWT_EXPIRES_IN: '15m'
+  PLATFORM_DOMAIN: 'yourplatform.com'
+---
+# ── Secret (reference only — use AWS Secrets Manager / Vault in practice) ─────
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-secrets
+  namespace: saas-blog
+type: Opaque
+stringData:
+  JWT_SECRET: 'replace-with-strong-secret'
+  WEBHOOK_SECRET: 'replace-with-webhook-secret'
+  DB_PASSWORD: 'replace-with-db-password'
+  REDIS_URL: 'redis://redis-master.saas-blog.svc.cluster.local:6379'
+---
+# ── Public Blog API Deployment ─────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blog-api
+  namespace: saas-blog
+  labels:
+    app: blog-api
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: blog-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: blog-api
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: api
+          image: your-registry/saas-blog-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3001
+          envFrom:
+            - configMapRef:
+                name: api-config
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: JWT_SECRET
+            - name: WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: WEBHOOK_SECRET
+            - name: DB_HOST
+              value: 'aurora-cluster.saas-blog.svc.cluster.local'
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: DB_PASSWORD
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: REDIS_URL
+          resources:
+            requests:
+              cpu: '250m'
+              memory: '256Mi'
+            limits:
+              cpu: '1000m'
+              memory: '1Gi'
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                command: ['/bin/sh', '-c', 'sleep 5']
+---
+# ── HPA for Blog API ───────────────────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: blog-api-hpa
+  namespace: saas-blog
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: blog-api
+  minReplicas: 5
+  maxReplicas: 50
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 5
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+---
+# ── Service ────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: blog-api-svc
+  namespace: saas-blog
+spec:
+  selector:
+    app: blog-api
+  ports:
+    - port: 80
+      targetPort: 3001
+  type: ClusterIP
+---
+# ── Background Worker Deployment ───────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blog-worker
+  namespace: saas-blog
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: blog-worker
+  template:
+    metadata:
+      labels:
+        app: blog-worker
+    spec:
+      containers:
+        - name: worker
+          image: your-registry/saas-blog-api:latest
+          command: ['node', 'src/jobs/worker.js']
+          envFrom:
+            - configMapRef:
+                name: api-config
+          env:
+            - name: DB_HOST
+              value: 'aurora-cluster.saas-blog.svc.cluster.local'
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: DB_PASSWORD
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: REDIS_URL
+          resources:
+            requests:
+              cpu: '100m'
+              memory: '128Mi'
+            limits:
+              cpu: '500m'
+              memory: '512Mi'
+---
+# ── Ingress ────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: saas-blog-ingress
+  namespace: saas-blog
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: '10m'
+    nginx.ingress.kubernetes.io/rate-limit: '100'
+    nginx.ingress.kubernetes.io/rate-limit-burst-multiplier: '5'
+spec:
+  tls:
+    - hosts:
+        - api.yourplatform.com
+        - admin.yourplatform.com
+      secretName: platform-tls
+  rules:
+    - host: api.yourplatform.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: blog-api-svc
+                port:
+                  number: 80
+    - host: admin.yourplatform.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: admin-dashboard-svc
+                port:
+                  number: 80

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Blog Integration Example</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: -apple-system, sans-serif;
+        line-height: 1.6;
+        padding: 20px;
+        background: #f5f5f5;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      h1 {
+        margin-bottom: 20px;
+        color: #333;
+      }
+      .post-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .post-card h2 {
+        margin-bottom: 10px;
+        color: #2563eb;
+      }
+      .post-card img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 4px;
+        margin-bottom: 10px;
+      }
+      .post-card .meta {
+        font-size: 14px;
+        color: #666;
+        margin-top: 10px;
+      }
+      .post-card .excerpt {
+        color: #444;
+        margin: 10px 0;
+      }
+      .loading {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+      }
+      .error {
+        background: #fee;
+        color: #c00;
+        padding: 20px;
+        border-radius: 8px;
+      }
+      .category-tag {
+        display: inline-block;
+        background: #e0f2fe;
+        color: #0369a1;
+        padding: 4px 12px;
+        border-radius: 16px;
+        font-size: 12px;
+        margin-right: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1 id="site-title">Loading...</h1>
+      <div id="posts-container">
+        <div class="loading">Loading posts...</div>
+      </div>
+    </div>
+
+    <script>
+      // ═══════════════════════════════════════════════════════════════════════════
+      // CONFIGURATION - Replace these values with your own
+      // ═══════════════════════════════════════════════════════════════════════════
+
+      const API_BASE = 'http://localhost:3001'; // Your API URL
+      const API_TOKEN =
+        'sbp_65d9570ce35057f2c0ba8b18547127a845e360901c205667a16a8ac8868baf9f'; // Your API Token
+
+      // ═══════════════════════════════════════════════════════════════════════════
+
+      async function apiRequest(endpoint) {
+        const response = await fetch(`${API_BASE}/api/v1${endpoint}`, {
+          headers: {
+            'X-API-Token': API_TOKEN,
+            Accept: 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`API Error: ${response.status}`);
+        }
+
+        return response.json();
+      }
+
+      async function loadSiteConfig() {
+        try {
+          const data = await apiRequest('/site-config');
+          if (data.success) {
+            document.getElementById('site-title').textContent =
+              data.data.site_name;
+            document.title = data.data.site_name;
+          }
+        } catch (error) {
+          console.error('Failed to load site config:', error);
+        }
+      }
+
+      async function loadPosts() {
+        const container = document.getElementById('posts-container');
+
+        try {
+          const data = await apiRequest('/posts?page=1&per_page=10');
+
+          if (!data.success || !data.data.length) {
+            container.innerHTML = '<div class="error">No posts found</div>';
+            return;
+          }
+
+          container.innerHTML = data.data
+            .map(
+              post => `
+          <article class="post-card">
+            ${post.featured_image_url ? `<img src="${post.featured_image_url}" alt="${post.title}">` : ''}
+            <h2><a href="/post/${post.slug}">${post.title}</a></h2>
+            <div class="categories">
+              ${post.categories.map(cat => `<span class="category-tag">${cat.name}</span>`).join('')}
+            </div>
+            <p class="excerpt">${post.excerpt || ''}</p>
+            <div class="meta">
+              By ${post.author?.name || 'Unknown'} • 
+              ${post.reading_time_mins || 5} min read • 
+              ${new Date(post.published_at).toLocaleDateString()}
+            </div>
+          </article>
+        `
+            )
+            .join('');
+        } catch (error) {
+          container.innerHTML = `<div class="error">Failed to load posts: ${error.message}</div>`;
+        }
+      }
+
+      // Initialize
+      document.addEventListener('DOMContentLoaded', () => {
+        loadSiteConfig();
+        loadPosts();
+      });
+    </script>
+  </body>
+</html>

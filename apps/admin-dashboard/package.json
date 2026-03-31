@@ -1,0 +1,37 @@
+{
+  "name": "@saas-blog/admin-dashboard",
+  "version": "1.0.0",
+  "description": "Admin dashboard for SaaS Blog Platform",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tiptap/extension-character-count": "^2.4.0",
+    "@tiptap/extension-image": "^2.4.0",
+    "@tiptap/extension-link": "^2.4.0",
+    "@tiptap/extension-placeholder": "^2.4.0",
+    "@tiptap/react": "^2.4.0",
+    "@tiptap/starter-kit": "^2.4.0",
+    "lucide-react": "^0.577.0",
+    "next": "^14.2.25",
+    "next-auth": "^4.24.7",
+    "next-auth": "^4.24.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hot-toast": "^2.4.1",
+    "recharts": "^2.12.4",
+    "swr": "^2.2.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.5",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.0",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.25",
+    "typescript": "^5.4.5"
+  }
+}
